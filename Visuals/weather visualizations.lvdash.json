@@ -1,0 +1,1153 @@
+{
+  "datasets": [
+    {
+      "name": "70d25ef7",
+      "displayName": "monthly_city",
+      "queryLines": [
+        "-- ---- Dataset: monthly_city ------------------------------------------\r\n",
+        "-- Feeds: temperature line, rainfall bars, rainy days, KPI counters\r\n",
+        "SELECT\r\n",
+        "  city,\r\n",
+        "  state,\r\n",
+        "  make_date(year, month, 1) AS month_start,\r\n",
+        "  year,\r\n",
+        "  month,\r\n",
+        "  make_date(year, 1, 1) AS year_start,\r\n",
+        "  avg_temperature_max,\r\n",
+        "  highest_temperature_max,\r\n",
+        "  total_precipitation,\r\n",
+        "  rainy_days,\r\n",
+        "  is_complete_month\r\n",
+        "FROM weather_medallion_dlt.gold.weather_monthly_city;"
+      ]
+    },
+    {
+      "name": "46aa53ab",
+      "displayName": "yearly_city",
+      "queryLines": [
+        "-- ---- Dataset: yearly_city -------------------------------------------\r\n",
+        "-- Complete years only, so a partial year (2026) does not look like a dry/cool year.\r\n",
+        "-- Feeds: yearly trend, hottest/wettest table\r\n",
+        "SELECT\r\n",
+        "  city,\r\n",
+        "  state,\r\n",
+        "  year,\r\n",
+        "  make_date(year, 1, 1) AS year_start,\r\n",
+        "  avg_temperature_max,\r\n",
+        "  total_precipitation,\r\n",
+        "  rainy_days,\r\n",
+        "  hottest_day,\r\n",
+        "  hottest_day_temperature,\r\n",
+        "  wettest_day,\r\n",
+        "  wettest_day_precipitation,\r\n",
+        "  yoy_avg_temperature_change,\r\n",
+        "  yoy_total_precipitation_change\r\n",
+        "FROM weather_medallion_dlt.gold.weather_yearly_city\r\n",
+        "WHERE is_complete_year\r\n",
+        "ORDER BY city, year;"
+      ]
+    },
+    {
+      "name": "d4e3fa72",
+      "displayName": "city_month_climate",
+      "queryLines": [
+        "-- ---- Dataset: city_month_climate ------------------------------------\r\n",
+        "-- \"Typical\" temperature and rainfall for each city and calendar month (complete months only).\r\n",
+        "-- Feeds: city x month heatmap\r\n",
+        "SELECT\r\n",
+        "  city,\r\n",
+        "  state,\r\n",
+        "  month,\r\n",
+        "  date_format(make_date(2000, month, 1), 'MMM') AS month_name,\r\n",
+        "  ROUND(AVG(avg_temperature_max), 1) AS typical_temperature_max,\r\n",
+        "  ROUND(AVG(total_precipitation), 1) AS typical_monthly_rainfall\r\n",
+        "FROM weather_medallion_dlt.gold.weather_monthly_city\r\n",
+        "WHERE is_complete_month\r\n",
+        "GROUP BY city, state, month;"
+      ]
+    },
+    {
+      "name": "8baccea0",
+      "displayName": "state_monthly",
+      "queryLines": [
+        "-- ---- Dataset: state_monthly -----------------------------------------\r\n",
+        "-- Feeds: state comparison bars\r\n",
+        "SELECT\r\n",
+        "  state,\r\n",
+        "  make_date(year, month, 1) AS month_start,\r\n",
+        "  year,\r\n",
+        "  month,\r\n",
+        "  cities_in_state,\r\n",
+        "  avg_temperature_max,\r\n",
+        "  avg_city_precipitation_total,\r\n",
+        "  avg_city_rainy_days\r\n",
+        "FROM weather_medallion_dlt.gold.weather_monthly_state\r\n",
+        "WHERE is_complete_month;"
+      ]
+    },
+    {
+      "name": "5531c439",
+      "displayName": "anomalies",
+      "queryLines": [
+        "-- ---- Dataset: anomalies ---------------------------------------------\r\n",
+        "-- Complete months only (incomplete months have null anomalies).\r\n",
+        "-- Feeds: temperature and rainfall anomaly bars\r\n",
+        "SELECT\r\n",
+        "  city,\r\n",
+        "  state,\r\n",
+        "  make_date(year, month, 1) AS month_start,\r\n",
+        "  year,\r\n",
+        "  month,\r\n",
+        "  make_date(year, 1, 1) AS year_start,\r\n",
+        "  avg_temperature_max,\r\n",
+        "  baseline_avg_temperature_max,\r\n",
+        "  temperature_anomaly,\r\n",
+        "  total_precipitation,\r\n",
+        "  baseline_total_precipitation,\r\n",
+        "  precipitation_anomaly\r\n",
+        "FROM weather_medallion_dlt.gold.weather_monthly_anomaly\r\n",
+        "WHERE is_complete_month;"
+      ],
+      "columns": [
+        {
+          "displayName": "temperature_anomaly_direction",
+          "description": "Labels each month's temperature anomaly as above (warmer) or below (cooler) the baseline; drives red/blue bar coloring.",
+          "expression": "CASE WHEN `temperature_anomaly` >= 0 THEN 'Warmer than usual' ELSE 'Cooler than usual' END"
+        },
+        {
+          "displayName": "precipitation_anomaly_direction",
+          "description": "Labels each month's rainfall anomaly as above (wetter) or below (drier) the baseline; drives red/blue bar coloring.",
+          "expression": "CASE WHEN `precipitation_anomaly` >= 0 THEN 'Wetter than usual' ELSE 'Drier than usual' END"
+        }
+      ]
+    },
+    {
+      "name": "250728cf",
+      "displayName": "seasons",
+      "queryLines": [
+        "-- ---- Dataset: seasons -----------------------------------------------\r\n",
+        "-- Season summary straight from silver (gold has no season grain).\r\n",
+        "-- Feeds: season comparison\r\n",
+        "SELECT\r\n",
+        "  d.city,\r\n",
+        "  d.state,\r\n",
+        "  w.year,\r\n",
+        "  w.season,\r\n",
+        "  ROUND(AVG(w.temperature_max), 1) AS avg_temperature_max,\r\n",
+        "  ROUND(SUM(w.precipitation), 1) AS total_precipitation,\r\n",
+        "  SUM(CASE WHEN w.is_rainy_day THEN 1 ELSE 0 END) AS rainy_days,\r\n",
+        "  COUNT(*) AS days_with_data\r\n",
+        "FROM weather_medallion_dlt.silver.weather_daily w\r\n",
+        "JOIN weather_medallion_dlt.silver.dim_location d USING (location_id)\r\n",
+        "GROUP BY d.city, d.state, w.year, w.season;"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "2e6a2521",
+      "displayName": "City explorer",
+      "layout": [
+        {
+          "widget": {
+            "name": "city_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b5abf1cf7a50d683baacf367e_city",
+                "query": {
+                  "datasetName": "70d25ef7",
+                  "fields": [
+                    {
+                      "name": "city",
+                      "expression": "`city`"
+                    },
+                    {
+                      "name": "city_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b91a61cb3bb8285dc51b12e71_city",
+                "query": {
+                  "datasetName": "46aa53ab",
+                  "fields": [
+                    {
+                      "name": "city",
+                      "expression": "`city`"
+                    },
+                    {
+                      "name": "city_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8bec371705b22153561d3996de_city",
+                "query": {
+                  "datasetName": "5531c439",
+                  "fields": [
+                    {
+                      "name": "city",
+                      "expression": "`city`"
+                    },
+                    {
+                      "name": "city_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "scale": {
+                "sort": {
+                  "by": "natural-order"
+                },
+                "type": "categorical"
+              },
+              "selection": {
+                "defaultSelection": {
+                  "values": {
+                    "dataType": "STRING",
+                    "values": [
+                      {
+                        "value": "Kolkata"
+                      }
+                    ]
+                  }
+                }
+              },
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "City"
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "city",
+                    "queryName": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b5abf1cf7a50d683baacf367e_city"
+                  },
+                  {
+                    "fieldName": "city",
+                    "queryName": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b91a61cb3bb8285dc51b12e71_city"
+                  },
+                  {
+                    "fieldName": "city",
+                    "queryName": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8bec371705b22153561d3996de_city"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "hottest_daily_high",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "46aa53ab",
+                  "fields": [
+                    {
+                      "name": "max(hottest_day_temperature)",
+                      "expression": "MAX(`hottest_day_temperature`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Hottest daily high",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "max(hottest_day_temperature)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "year_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b5abf1cf7a50d683baacf367e_year_start",
+                "query": {
+                  "datasetName": "70d25ef7",
+                  "fields": [
+                    {
+                      "name": "year_start",
+                      "expression": "`year_start`"
+                    },
+                    {
+                      "name": "year_start_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b91a61cb3bb8285dc51b12e71_year_start",
+                "query": {
+                  "datasetName": "46aa53ab",
+                  "fields": [
+                    {
+                      "name": "year_start",
+                      "expression": "`year_start`"
+                    },
+                    {
+                      "name": "year_start_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              },
+              {
+                "name": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8bec371705b22153561d3996de_year_start",
+                "query": {
+                  "datasetName": "5531c439",
+                  "fields": [
+                    {
+                      "name": "year_start",
+                      "expression": "`year_start`"
+                    },
+                    {
+                      "name": "year_start_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Year"
+              },
+              "widgetType": "filter-date-range-picker",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "year_start",
+                    "queryName": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b5abf1cf7a50d683baacf367e_year_start"
+                  },
+                  {
+                    "fieldName": "year_start",
+                    "queryName": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8b91a61cb3bb8285dc51b12e71_year_start"
+                  },
+                  {
+                    "fieldName": "year_start",
+                    "queryName": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8bec371705b22153561d3996de_year_start"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "total_rainfall",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "46aa53ab",
+                  "fields": [
+                    {
+                      "name": "sum(total_precipitation)",
+                      "expression": "SUM(`total_precipitation`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total rainfall"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(total_precipitation)",
+                  "rowNumber": 0
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 0,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "temperature_line",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "70d25ef7",
+                  "fields": [
+                    {
+                      "name": "month_start",
+                      "expression": "`month_start`"
+                    },
+                    {
+                      "name": "avg(avg_temperature_max)",
+                      "expression": "AVG(`avg_temperature_max`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Monthly max temperature"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "month_start",
+                  "displayName": "month_start",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "avg(avg_temperature_max)",
+                  "displayName": "avg_temperature_max",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "rainfall_bars",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "70d25ef7",
+                  "fields": [
+                    {
+                      "name": "month_start",
+                      "expression": "`month_start`"
+                    },
+                    {
+                      "name": "sum(total_precipitation)",
+                      "expression": "SUM(`total_precipitation`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Monthly rainfall"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month_start",
+                  "displayName": "month_start",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(total_precipitation)",
+                  "displayName": "total_precipitation",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "yearly_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "46aa53ab",
+                  "fields": [
+                    {
+                      "name": "year",
+                      "expression": "`year`"
+                    },
+                    {
+                      "name": "avg_temperature_max",
+                      "expression": "`avg_temperature_max`"
+                    },
+                    {
+                      "name": "total_precipitation",
+                      "expression": "`total_precipitation`"
+                    },
+                    {
+                      "name": "hottest_day",
+                      "expression": "`hottest_day`"
+                    },
+                    {
+                      "name": "hottest_day_temperature",
+                      "expression": "`hottest_day_temperature`"
+                    },
+                    {
+                      "name": "wettest_day",
+                      "expression": "`wettest_day`"
+                    },
+                    {
+                      "name": "wettest_day_precipitation",
+                      "expression": "`wettest_day_precipitation`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Yearly summary"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "year"
+                  },
+                  {
+                    "fieldName": "avg_temperature_max"
+                  },
+                  {
+                    "fieldName": "total_precipitation"
+                  },
+                  {
+                    "fieldName": "hottest_day"
+                  },
+                  {
+                    "fieldName": "hottest_day_temperature"
+                  },
+                  {
+                    "fieldName": "wettest_day"
+                  },
+                  {
+                    "fieldName": "wettest_day_precipitation"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "temperature_anomaly_chart",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5531c439",
+                  "fields": [
+                    {
+                      "name": "temperature_anomaly_direction",
+                      "expression": "`temperature_anomaly_direction`"
+                    },
+                    {
+                      "name": "month_start",
+                      "expression": "`month_start`"
+                    },
+                    {
+                      "name": "avg(temperature_anomaly)",
+                      "expression": "AVG(`temperature_anomaly`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Temperature anomaly by month"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month_start",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "avg(temperature_anomaly)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "temperature_anomaly_direction",
+                  "scale": {
+                    "mappings": [
+                      {
+                        "color": "#D64545",
+                        "value": "Warmer than usual"
+                      },
+                      {
+                        "color": "#3B7DD8",
+                        "value": "Cooler than usual"
+                      }
+                    ],
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 5
+          }
+        },
+        {
+          "widget": {
+            "name": "precipitation_anomaly_chart",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "5531c439",
+                  "fields": [
+                    {
+                      "name": "precipitation_anomaly_direction",
+                      "expression": "`precipitation_anomaly_direction`"
+                    },
+                    {
+                      "name": "month_start",
+                      "expression": "`month_start`"
+                    },
+                    {
+                      "name": "avg(precipitation_anomaly)",
+                      "expression": "AVG(`precipitation_anomaly`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Rainfall anomaly by month"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "month_start",
+                  "scale": {
+                    "type": "temporal"
+                  }
+                },
+                "y": {
+                  "fieldName": "avg(precipitation_anomaly)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "precipitation_anomaly_direction",
+                  "scale": {
+                    "mappings": [
+                      {
+                        "color": "#D64545",
+                        "value": "Wetter than usual"
+                      },
+                      {
+                        "color": "#3B7DD8",
+                        "value": "Drier than usual"
+                      }
+                    ],
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 7,
+            "width": 6,
+            "height": 5
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "01611757",
+      "displayName": "Compare places",
+      "layout": [
+        {
+          "widget": {
+            "name": "temperature_heatmap",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d4e3fa72",
+                  "fields": [
+                    {
+                      "name": "avg(typical_temperature_max)",
+                      "expression": "AVG(`typical_temperature_max`)"
+                    },
+                    {
+                      "name": "month_name",
+                      "expression": "`month_name`"
+                    },
+                    {
+                      "name": "city",
+                      "expression": "`city`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Typical max temperature by city and month"
+              },
+              "version": 3,
+              "widgetType": "heatmap",
+              "encodings": {
+                "x": {
+                  "fieldName": "month_name",
+                  "scale": {
+                    "sort": {
+                      "by": "custom-order",
+                      "orderedValues": [
+                        "Jan",
+                        "Feb",
+                        "Mar",
+                        "Apr",
+                        "May",
+                        "Jun",
+                        "Jul",
+                        "Aug",
+                        "Sep",
+                        "Oct",
+                        "Nov",
+                        "Dec"
+                      ]
+                    },
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "city",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "avg(typical_temperature_max)",
+                  "scale": {
+                    "colorRamp": {
+                      "mode": "scheme",
+                      "scheme": "orangered"
+                    },
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "state_filter",
+            "queries": [
+              {
+                "name": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8bd7981f5292d42915623d51b6_state",
+                "query": {
+                  "datasetName": "8baccea0",
+                  "fields": [
+                    {
+                      "name": "state",
+                      "expression": "`state`"
+                    },
+                    {
+                      "name": "state_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "State"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "state",
+                    "queryName": "dashboards/01f1ea8b37ef1607af26a84c09e7a921/datasets/01f1ea8bd7981f5292d42915623d51b6_state"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 3,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "rainfall_heatmap",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "d4e3fa72",
+                  "fields": [
+                    {
+                      "name": "avg(typical_monthly_rainfall)",
+                      "expression": "AVG(`typical_monthly_rainfall`)"
+                    },
+                    {
+                      "name": "month_name",
+                      "expression": "`month_name`"
+                    },
+                    {
+                      "name": "city",
+                      "expression": "`city`"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Typical monthly rainfall by city and month"
+              },
+              "version": 3,
+              "widgetType": "heatmap",
+              "encodings": {
+                "x": {
+                  "fieldName": "month_name",
+                  "scale": {
+                    "sort": {
+                      "by": "custom-order",
+                      "orderedValues": [
+                        "Jan",
+                        "Feb",
+                        "Mar",
+                        "Apr",
+                        "May",
+                        "Jun",
+                        "Jul",
+                        "Aug",
+                        "Sep",
+                        "Oct",
+                        "Nov",
+                        "Dec"
+                      ]
+                    },
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "city",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "avg(typical_monthly_rainfall)",
+                  "scale": {
+                    "colorRamp": {
+                      "mode": "scheme",
+                      "scheme": "blues"
+                    },
+                    "type": "quantitative"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "state_temperature_bars",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "8baccea0",
+                  "fields": [
+                    {
+                      "name": "state",
+                      "expression": "`state`"
+                    },
+                    {
+                      "name": "avg(avg_temperature_max)",
+                      "expression": "AVG(`avg_temperature_max`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Average max temperature by state"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "state",
+                  "displayName": "state",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "avg(avg_temperature_max)",
+                  "displayName": "avg_temperature_max",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "state",
+                  "displayName": "state",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 12,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "season_comparison",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "250728cf",
+                  "fields": [
+                    {
+                      "name": "city",
+                      "expression": "`city`"
+                    },
+                    {
+                      "name": "season",
+                      "expression": "`season`"
+                    },
+                    {
+                      "name": "sum(total_precipitation)",
+                      "expression": "SUM(`total_precipitation`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total rainfall by season and city"
+              },
+              "version": 3,
+              "mark": {
+                "layout": "group"
+              },
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "season",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(total_precipitation)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "city",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 14,
+            "width": 12,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
